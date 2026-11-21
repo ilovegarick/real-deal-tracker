@@ -1,0 +1,6 @@
+watchlist.json
+history.json
+history.json.*.tmp
+node_modules/
+.env
+.env.*
