@@ -1,0 +1,40 @@
+name: Price watch
+
+on:
+  schedule:
+    - cron: '0 8,18 * * *'
+      timezone: America/Los_Angeles
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: price-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test
+      - uses: actions/cache/restore@v4
+        with:
+          path: .tracker-state.json
+          key: price-watch-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: price-watch-v1-
+      - run: node hosted-check.mjs
+        env:
+          TRACK_REQUEST: ${{ vars.TRACK_REQUEST || 'genuine Mr. Heater F273704 under $25' }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      - uses: actions/cache/save@v4
+        with:
+          path: .tracker-state.json
+          key: price-watch-v1-${{ github.run_id }}-${{ github.run_attempt }}

@@ -4,3 +4,5 @@ history.json.*.tmp
 node_modules/
 .env
 .env.*
+.tracker-state.json
+.tracker-state.json.tmp

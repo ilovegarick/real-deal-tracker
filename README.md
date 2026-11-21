@@ -2,6 +2,22 @@
 
 Track the selling price of a specific product and flag meaningful drops. A TV that usually sells for $800 triggers a $100-savings alert at $700, regardless of its advertised list price.
 
+## Hosted search and email alerts
+
+The **Price watch** GitHub Actions workflow runs at 8 a.m. and 6 p.m. Pacific, even when your PC is off. It uses one plain-text request at a time. The default is `genuine Mr. Heater F273704 under $25`. To change it, set the repository Actions variable `TRACK_REQUEST`. Use the brand, exact model, and price. Use `at or below` to include the target price.
+
+The tracker searches for product pages and verifies the exact model, brand, and available price at supported U.S. retailers. The workflow log lists supported sellers it could not find or verify. The offer price excludes shipping and tax. It emails the best qualifying offer and emails again for a lower qualifying price. Alert state is cached between runs. A cache eviction can cause a repeat alert.
+
+In a private GitHub repository, add these Actions secrets under **Settings → Secrets and variables → Actions**:
+
+- `SERPAPI_API_KEY` from the [SerpApi free plan](https://serpapi.com/pricing).
+- `RESEND_API_KEY` from the [Resend free plan](https://resend.com/pricing).
+- `ALERT_EMAIL` set to the email address you used to sign up for Resend. Its default sender is for sending to your own account.
+
+Run **Actions → Price watch → Run workflow** once to verify seller coverage. One scheduled watch uses at most two search API calls per check, or 124 in a 31-day month. Other uses of the account and manual runs also consume quota. Use the providers' free plans without enabling paid overages.
+
+The original retailer-link watchlist can still be run locally.
+
 ## Try it
 
 Run these commands from the project directory with Node.js 22 or later. There are no dependencies to install.

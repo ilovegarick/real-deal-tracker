@@ -1,4 +1,4 @@
-import { cents } from './tracker.mjs';
+import { cents, matchesBrand } from './tracker.mjs';
 
 function itemId(url) {
   if (url?.origin !== 'https://www.homedepot.com') return null;
@@ -30,7 +30,8 @@ export async function homeDepotPrice(entry, apiKey, request = fetch) {
     .includes(product?.availability_type);
   const price = cents(product?.price);
   if (String(product?.product_id) !== productId || product?.model_number !== entry.model ||
-      itemId(link) !== productId || !available || price === null) {
+      itemId(link) !== productId || !matchesBrand(product?.brand, entry.brand) ||
+      !available || price === null) {
     throw new Error('Could not verify an available Home Depot price for this exact item.');
   }
   return price;

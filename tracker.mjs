@@ -9,11 +9,18 @@ export function cents(value) {
   return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
 }
 
-export function readOffer(html, model) {
+export function matchesBrand(actual, expected) {
+  const name = typeof actual === 'string' ? actual : actual?.name;
+  const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return !expected || (typeof name === 'string' && normalize(name) === normalize(expected));
+}
+
+export function readOffer(html, model, brand) {
   const prices = [];
   function visit(node) {
     if (!node || typeof node !== 'object') return;
-    if ([node.model, node.mpn, node.sku].includes(model) && node['@type'] === 'Product') {
+    if ([node.model, node.mpn, node.sku].includes(model) && node['@type'] === 'Product' &&
+        matchesBrand(node.brand, brand)) {
       for (const offer of [node.offers].flat()) {
         if (offer?.['@type'] !== 'Offer' || offer.priceCurrency !== 'USD') continue;
         if (!/(?:^|\/)InStock$/.test(offer.availability ?? '')) continue;
