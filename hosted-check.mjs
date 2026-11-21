@@ -13,6 +13,7 @@ try {
     searchKey: process.env.SERPAPI_API_KEY,
     emailKey: process.env.RESEND_API_KEY,
     recipient: process.env.ALERT_EMAIL,
+    retailerHosts: process.env.RETAILER_HOSTS,
   });
   const temporary = stateFile + '.tmp';
   await writeFile(temporary, JSON.stringify(state, null, 2) + '\n');

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { homeDepotPrice } from './home-depot.mjs';
 import { cents, readOffer } from './tracker.mjs';
 
-const retailers = new Map([
+const defaultRetailers = new Map([
   ['www.homedepot.com', 'Home Depot'],
   ['www.runnings.com', 'Runnings'],
   ['shop.ranch-home.com', 'Ranch & Home'],
@@ -32,8 +32,22 @@ export function parseRequest(text) {
   };
 }
 
+export function supportedRetailers(additionalHosts = '') {
+  const retailers = new Map(defaultRetailers);
+  for (const value of additionalHosts.split(',')) {
+    const host = value.trim().toLowerCase();
+    if (!host) continue;
+    if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*$/.test(host)) {
+      throw new Error('RETAILER_HOSTS must contain comma-separated retailer hostnames.');
+    }
+    if (!retailers.has(host)) retailers.set(host, host);
+  }
+  return retailers;
+}
+
 export async function checkRequest(text, previous, credentials, request = fetch, log = console.log) {
   const watch = parseRequest(text);
+  const retailers = supportedRetailers(credentials.retailerHosts);
   if (!credentials.searchKey || !credentials.emailKey || !credentials.recipient) {
     throw new Error('Set SERPAPI_API_KEY, RESEND_API_KEY, and ALERT_EMAIL to run hosted checks.');
   }
