@@ -1,5 +1,6 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
+import { homeDepotPrice } from './home-depot.mjs';
 import { baseline, cents, deal, nextCheck, readOffer } from './tracker.mjs';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
@@ -65,12 +66,12 @@ async function check(path = 'watchlist.json', watching = false) {
   const today = new Date().toISOString().slice(0, 10);
   const messages = [];
   let failures = 0;
-  for (const { name, model, url, usualPrice, threshold } of entries) {
+  for (const entry of entries) {
+    const { name, model, url, usualPrice, threshold } = entry;
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: 'error' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const price = readOffer(await response.text(), model);
-      if (price === null) throw new Error('No unambiguous in-stock USD offer for this exact model');
+      const price = entry.source === 'serpapi-home-depot'
+        ? await homeDepotPrice(entry, process.env.SERPAPI_API_KEY)
+        : await pagePrice(url, model);
       const key = JSON.stringify([model, url.href]);
       const state = history[key] ??= { observations: {}, alertedPrice: null };
       const usual = baseline(state.observations, today, usualPrice);
@@ -94,4 +95,12 @@ async function check(path = 'watchlist.json', watching = false) {
   await rename(temporary, historyPath);
   messages.forEach((message) => console.log(message));
   return failures > 0 ? 1 : 0;
+}
+
+async function pagePrice(url, model) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: 'error' });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const price = readOffer(await response.text(), model);
+  if (price === null) throw new Error('No unambiguous in-stock USD offer for this exact model');
+  return price;
 }

@@ -30,3 +30,14 @@ node check.mjs --watch
 Watch mode checks your list immediately and then at 8 a.m. and 6 p.m. in your computer's local time zone. Keep the terminal open and the computer awake for timely checks. Alerts print in that terminal and request a bell if the terminal supports it. Press Ctrl+C to stop. Use one tracker process at a time.
 
 The tracker checks the product URLs on your watchlist. Your watchlist and price history are local files excluded from Git.
+
+## Home Depot checks
+
+Set `"source": "serpapi-home-depot"` on a watchlist entry with the exact model and a U.S. Home Depot product URL containing its Internet number. The tracker uses [SerpApi’s Home Depot Product API](https://serpapi.com/home-depot-product) and checks the returned item, model, retailer link, availability, and price. Availability and pricing may vary by location. API requests may count against your SerpApi quota.
+
+Create a local `.env` file in the project folder with `SERPAPI_API_KEY=your_key_here`. Keep it private. Git ignores this file. Run an initial check, or add `--watch` for the twice-daily schedule.
+
+```sh
+node --env-file=.env check.mjs
+node --env-file=.env check.mjs --watch
+```
