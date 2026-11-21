@@ -18,6 +18,7 @@ export function readOffer(html, model) {
         if (offer?.['@type'] !== 'Offer' || offer.priceCurrency !== 'USD') continue;
         if (!/(?:^|\/)InStock$/.test(offer.availability ?? '')) continue;
         if (offer.itemCondition && !/(?:^|\/)NewCondition$/.test(offer.itemCondition)) continue;
+      if (offer.validForMemberTier != null) continue;
         const price = cents(offer.price);
         if (price !== null) prices.push(price);
       }
@@ -39,13 +40,25 @@ export function readOffer(html, model) {
   return unique.length === 1 ? unique[0] : null;
 }
 
-export function baseline(history, today, fallback) {
+export function baseline(history, today, usualPrice) {
+  if (usualPrice !== null) return usualPrice;
   const cutoff = new Date(Date.parse(today) - 60 * 86400000).toISOString().slice(0, 10);
   const prices = Object.entries(history)
     .filter(([date]) => date >= cutoff && date < today)
     .map(([, price]) => price)
     .sort((a, b) => a - b);
-  if (prices.length < 7) return fallback;
+  if (prices.length < 7) return null;
   const middle = Math.floor(prices.length / 2);
   return Math.round((prices[middle] + prices[Math.floor((prices.length - 1) / 2)]) / 2);
+}
+
+export function nextCheck(now) {
+  const next = new Date(now);
+  next.setHours(8, 0, 0, 0);
+  if (next > now) return next;
+  next.setHours(18);
+  if (next > now) return next;
+  next.setDate(next.getDate() + 1);
+  next.setHours(8);
+  return next;
 }

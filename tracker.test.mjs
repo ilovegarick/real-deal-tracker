@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { baseline, deal, readOffer } from './tracker.mjs';
+import { baseline, deal, nextCheck, readOffer } from './tracker.mjs';
 
 test('compares the sale against the usual price in cents', () => {
   assert.deepEqual(deal(70000, 80000, 10000), { savings: 10000, qualifies: true });
@@ -31,6 +31,22 @@ test('learns the usual price from prior days and excludes stale and current obse
     '2026-11-07': 85000,
     '2026-11-08': 60000,
   };
-  assert.equal(baseline(history, '2026-11-08', 79000), 80000);
-  assert.equal(baseline(history, '2026-11-07', 79000), 79000);
+  assert.equal(baseline(history, '2026-11-08', null), 80000);
+  assert.equal(baseline(history, '2026-11-07', null), null);
+  assert.equal(baseline(history, '2026-11-08', 79000), 79000);
+});
+
+test('rejects member-only offers', () => {
+  const html = `<script type="application/ld+json">${JSON.stringify({
+    '@type': 'Product', model: 'TEST', offers: {
+      '@type': 'Offer', price: '100', priceCurrency: 'USD', availability: 'InStock',
+      validForMemberTier: { '@id': '#members' },
+    },
+  })}</script>`;
+  assert.equal(readOffer(html, 'TEST'), null);
+});
+
+test('schedules the next local 8 a.m. or 6 p.m. check', () => {
+  assert.deepEqual(nextCheck(new Date(2026, 10, 21, 8)), new Date(2026, 10, 21, 18));
+  assert.deepEqual(nextCheck(new Date(2026, 10, 21, 19)), new Date(2026, 10, 22, 8));
 });

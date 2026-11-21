@@ -1,28 +1,47 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
-import { baseline, cents, deal, readOffer } from './tracker.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
+import { baseline, cents, deal, nextCheck, readOffer } from './tracker.mjs';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const money = (amount) => usd.format(amount / 100);
 
-if (process.argv[2] === '--demo') {
+const [, , mode, watchlistPath] = process.argv;
+if (mode === '--demo') {
   const result = deal(70000, 80000, 10000);
-  console.log(`DEMO ALERT · LG OLED · $700 today · $800 usual price · ${money(result.savings)} saved`);
+  console.log(`DEMO · Sample offer $700 · Sample baseline $800 · ${money(result.savings)} difference`);
+} else if (mode === '--watch') {
+  await watch(watchlistPath);
 } else {
-  await check();
+  process.exitCode = await check(mode);
 }
 
-async function check() {
-  const config = JSON.parse(await readFile(process.argv[2] ?? 'watchlist.json', 'utf8'));
+async function watch(path) {
+  let scheduled = new Date();
+  while (true) {
+    try {
+      await check(path, true);
+    } catch (error) {
+      console.error(`Check failed · ${error.message}`);
+    }
+    const now = new Date();
+    scheduled = nextCheck(new Date(Math.max(now, scheduled)));
+    console.log(`Next check · ${scheduled.toLocaleString()}`);
+    await delay(Math.max(0, scheduled - Date.now()));
+  }
+}
+
+async function check(path = 'watchlist.json', watching = false) {
+  const config = JSON.parse(await readFile(path, 'utf8'));
   if (!Array.isArray(config) || config.length === 0) throw new Error('Add at least one watchlist entry.');
   const entries = config.map((entry) => {
     const url = new URL(entry.url);
-    const fallback = entry.usualPrice == null ? null : cents(entry.usualPrice);
+    const usualPrice = entry.usualPrice == null ? null : cents(entry.usualPrice);
     const threshold = cents(entry.minimumSavings);
     if (!entry.name || !entry.model || url.protocol !== 'https:' || threshold === null ||
-        (entry.usualPrice != null && fallback === null)) {
+        (entry.usualPrice != null && usualPrice === null)) {
       throw new Error('Each entry needs a name, exact model, HTTPS URL, and valid USD amounts.');
     }
-    return { ...entry, url, fallback, threshold };
+    return { ...entry, url, usualPrice, threshold };
   });
   const historyPath = 'history.json';
   let history;
@@ -35,7 +54,7 @@ async function check() {
   const today = new Date().toISOString().slice(0, 10);
   const messages = [];
   let failures = 0;
-  for (const { name, model, url, fallback, threshold } of entries) {
+  for (const { name, model, url, usualPrice, threshold } of entries) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: 'error' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -43,7 +62,7 @@ async function check() {
       if (price === null) throw new Error('No unambiguous in-stock USD offer for this exact model');
       const key = JSON.stringify([model, url.href]);
       const state = history[key] ??= { observations: {}, alertedPrice: null };
-      const usual = baseline(state.observations, today, fallback);
+      const usual = baseline(state.observations, today, usualPrice);
       state.observations[today] = price;
       const { savings, qualifies } = deal(price, usual, threshold);
       const alert = qualifies && (state.alertedPrice === null || price < state.alertedPrice);
@@ -51,8 +70,9 @@ async function check() {
       if (!qualifies) state.alertedPrice = null;
       const comparison = usual === null
         ? 'collecting price history'
-        : `${money(usual)} usual · ${savings > 0 ? money(savings) + ' saved' : 'no savings'}`;
-      messages.push(`${alert ? 'ALERT · ' : ''}${name} · ${money(price)} today · ${comparison} · ${url.href}`);
+        : `${money(usual)} ${usualPrice === null ? 'observed median' : 'configured baseline'} · ${savings > 0 ? money(savings) + ' below baseline' : 'no savings'}`;
+      const prefix = alert ? `${watching && process.stdout.isTTY ? '\u0007' : ''}ALERT · ` : '';
+      messages.push(`${prefix}${name} · ${money(price)} observed · ${comparison} · ${url.href}`);
     } catch (error) {
       failures++;
       console.error(`${name} · ${url.href} · ${error.message}`);
@@ -62,5 +82,5 @@ async function check() {
   await writeFile(temporary, JSON.stringify(history, null, 2) + '\n');
   await rename(temporary, historyPath);
   messages.forEach((message) => console.log(message));
-  if (failures > 0) process.exitCode = 1;
+  return failures > 0 ? 1 : 0;
 }
