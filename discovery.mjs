@@ -13,6 +13,7 @@ const defaultRetailers = new Map([
   ['www.reedssports.com', 'Reeds'],
   ['mrheater.com', 'Mr. Heater'],
 ]);
+const maxCandidatesPerRetailer = 3;
 const usd = new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' });
 const money = (price) => usd.format(price / 100);
 
@@ -64,24 +65,30 @@ export async function checkRequest(text, previous, credentials, request = fetch,
   for (const result of data.organic_results ?? []) {
     const url = typeof result.link === 'string' ? URL.parse(result.link) : null;
     if (!url || url.protocol !== 'https:' || url.port || url.username || url.password ||
-        !retailers.has(url.hostname) || candidates.has(url.hostname)) continue;
+        !retailers.has(url.hostname)) continue;
     if (!String(result.title).toUpperCase().includes(watch.model)) continue;
     url.hash = '';
     url.search = '';
-    candidates.set(url.hostname, url);
+    const links = candidates.get(url.hostname) ?? new Set();
+    if (links.size >= maxCandidatesPerRetailer) continue;
+    links.add(url.href);
+    candidates.set(url.hostname, links);
   }
 
   const offers = [];
-  for (const [host, url] of candidates) {
+  for (const [host, links] of candidates) {
     const seller = retailers.get(host);
-    try {
-      const price = host === 'www.homedepot.com'
-        ? await homeDepotPrice({ ...watch, url }, credentials.searchKey, request)
-        : await retailerPrice(request, url, watch);
-      offers.push({ seller, price, url: url.href });
-      log(`${seller} · ${money(price)} verified`);
-    } catch {
-      log(`${seller} · price or availability could not be verified`);
+    for (const link of links) {
+      const url = new URL(link);
+      try {
+        const price = host === 'www.homedepot.com'
+          ? await homeDepotPrice({ ...watch, url }, credentials.searchKey, request)
+          : await retailerPrice(request, url, watch);
+        offers.push({ seller, price, url: link });
+        log(`${seller} · ${money(price)} verified`);
+      } catch {
+        log(`${seller} · price or availability could not be verified`);
+      }
     }
   }
   const skipped = [...retailers].filter(([host]) => !candidates.has(host)).map(([, seller]) => seller);

@@ -61,3 +61,34 @@ test('discovers sellers, vets brand and model, and emails a deal only once', asy
   await checkRequest(watch, first, credentials, request, log);
   assert.equal(emails, 1);
 });
+
+test('checks later distinct results from the same retailer for a better offer', async () => {
+  const checked = [];
+  const messages = [];
+  const results = ['/missing?ref=search', '/missing#details', '/expensive', '/deal', '/beyond-limit'];
+  const credentials = { searchKey: 'search', emailKey: 'email', recipient: 'owner@example.com' };
+  const request = async (url, options) => {
+    if (url.host === 'serpapi.com') {
+      return Response.json({ organic_results: results.map((path) => ({
+        link: new URL(path, retailerLink).href, title: 'Mr. Heater F273704',
+      })) });
+    }
+    if (url.host === 'api.resend.com') {
+      messages.push(JSON.parse(options.body));
+      return Response.json({ id: 'test-email' });
+    }
+    checked.push(url.pathname);
+    if (url.pathname === '/missing') return new Response(null, { status: 404 });
+    const product = { '@type': 'Product', mpn: 'F273704', brand: { name: 'Mr. Heater' }, offers: {
+      '@type': 'Offer', price: url.pathname === '/expensive' ? '30' : '20',
+      priceCurrency: 'USD', availability: 'InStock',
+    } };
+    return new Response(`<script type="application/ld+json">${JSON.stringify(product)}</script>`);
+  };
+
+  const state = await checkRequest(watch, {}, credentials, request, () => {});
+  assert.deepEqual(checked, ['/missing', '/expensive', '/deal']);
+  assert.equal(state.alertedPrice, 2000);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0].text, /https:\/\/www\.runnings\.com\/deal$/);
+});
