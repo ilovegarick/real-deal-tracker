@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { homeDepotPrice } from './home-depot.mjs';
+import { HomeDepotProviderError, homeDepotPrice } from './home-depot.mjs';
 import { cents, readOffer } from './tracker.mjs';
 
 const defaultRetailers = new Map([
@@ -76,6 +76,7 @@ export async function checkRequest(text, previous, credentials, request = fetch,
   }
 
   const offers = [];
+  let providerError;
   for (const [host, links] of candidates) {
     const seller = retailers.get(host);
     for (const link of links) {
@@ -86,18 +87,23 @@ export async function checkRequest(text, previous, credentials, request = fetch,
           : await retailerPrice(request, url, watch);
         offers.push({ seller, price, url: link });
         log(`${seller} · ${money(price)} verified`);
-      } catch {
+      } catch (error) {
+        if (error instanceof HomeDepotProviderError) providerError ??= error;
         log(`${seller} · price or availability could not be verified`);
       }
     }
   }
   const skipped = [...retailers].filter(([host]) => !candidates.has(host)).map(([, seller]) => seller);
   if (skipped.length) log(`No matching search result · ${skipped.join(', ')}`);
-  if (!offers.length) throw new Error('No supported retailer returned a verifiable offer.');
-
-  offers.sort((a, b) => a.price - b.price);
   const key = JSON.stringify([watch.brand.toLowerCase(), watch.model, watch.target, watch.inclusive]);
   const state = previous.key === key ? previous : { key, alertedPrice: null };
+  if (!offers.length) {
+    if (providerError) throw providerError;
+    log('No supported retailer returned a verifiable offer.');
+    return state;
+  }
+
+  offers.sort((a, b) => a.price - b.price);
   const best = offers[0];
   const qualifies = watch.inclusive ? best.price <= watch.target : best.price < watch.target;
   if (!qualifies) return state;

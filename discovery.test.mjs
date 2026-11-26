@@ -6,6 +6,36 @@ const watch = 'genuine Mr. Heater F273704 under $25';
 const retailerLink = 'https://www.runnings.com/product';
 const homeDepotLink = 'https://www.homedepot.com/p/hose/305092305';
 
+test('keeps alert history when the only matching product is unavailable', async () => {
+  const credentials = { searchKey: 'search', emailKey: 'email', recipient: 'owner@example.com' };
+  const previous = { key: JSON.stringify(['mr. heater', 'F273704', 2500, false]), alertedPrice: 2499 };
+  const logs = [];
+  const request = async (url) => {
+    assert.equal(url.host, 'serpapi.com');
+    if (url.searchParams.get('engine') === 'google') {
+      return Response.json({ organic_results: [{ link: homeDepotLink, title: 'Mr. Heater F273704' }] });
+    }
+    return Response.json({ product_results: {
+      product_id: '305092305', model_number: 'F273704', link: homeDepotLink,
+      brand: { name: 'Mr. Heater' }, availability_type: 'Out of Stock', price: 20,
+    } });
+  };
+  assert.deepEqual(await checkRequest(watch, previous, credentials, request, (line) => logs.push(line)), previous);
+  assert.match(logs.at(-1), /no supported retailer returned a verifiable offer/i);
+});
+
+test('reports a Home Depot provider error when no other offer can be verified', async () => {
+  const credentials = { searchKey: 'search', emailKey: 'email', recipient: 'owner@example.com' };
+  const request = async (url) => {
+    assert.equal(url.host, 'serpapi.com');
+    if (url.searchParams.get('engine') === 'google') {
+      return Response.json({ organic_results: [{ link: homeDepotLink, title: 'Mr. Heater F273704' }] });
+    }
+    return new Response(null, { status: 429 });
+  };
+  await assert.rejects(checkRequest(watch, {}, credentials, request, () => {}), /SerpApi returned HTTP 429/);
+});
+
 test('parses a typed watch request without a retailer URL', () => {
   assert.deepEqual(parseRequest(watch), {
     query: 'Mr. Heater F273704', model: 'F273704', brand: 'Mr. Heater', target: 2500, inclusive: false,

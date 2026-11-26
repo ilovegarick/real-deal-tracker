@@ -1,5 +1,7 @@
 import { cents, matchesBrand } from './tracker.mjs';
 
+export class HomeDepotProviderError extends Error {}
+
 function itemId(url) {
   if (url?.origin !== 'https://www.homedepot.com') return null;
   return /^\/p\/(?:[^/]+\/)?([0-9]+)\/?$/.exec(url.pathname)?.[1] ?? null;
@@ -20,11 +22,18 @@ export async function homeDepotPrice(entry, apiKey, request = fetch) {
   try {
     response = await request(endpoint, { signal: AbortSignal.timeout(15000), redirect: 'error' });
   } catch {
-    throw new Error('Could not reach SerpApi. The tracker will retry on the next check.');
+    throw new HomeDepotProviderError('Could not reach SerpApi. The tracker will retry on the next check.');
   }
-  if (!response.ok) throw new Error(`SerpApi returned HTTP ${response.status}. Check your key and usage limits.`);
+  if (!response.ok) {
+    throw new HomeDepotProviderError(`SerpApi returned HTTP ${response.status}. Check your key and usage limits.`);
+  }
 
-  const { product_results: product } = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => null);
+  if (!data || typeof data !== 'object' || Array.isArray(data) || data.error ||
+      (data.search_metadata?.status && data.search_metadata.status !== 'Success')) {
+    throw new HomeDepotProviderError('SerpApi could not complete the Home Depot lookup.');
+  }
+  const product = data.product_results;
   const link = typeof product?.link === 'string' ? URL.parse(product.link) : null;
   const available = ['Available', 'Limited Stock', 'In Stock Nearby', 'Limited Stock Nearby']
     .includes(product?.availability_type);
